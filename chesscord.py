@@ -127,6 +127,6 @@ if __name__ == "__main__":
     # Chess()
     try:
         cli = Chesscord()
-        cli.run('NzA2MjcxNTE2OTAzMzQyMTM1.Xq31fw.b9Kp0-0mFM7S7CR1bYElNf9EwW8')
+        cli.run('DUMMY TOKEN DING DING')
     except Exception as e:
         Debug.log(str(e))
