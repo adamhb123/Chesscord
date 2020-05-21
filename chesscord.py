@@ -7,6 +7,12 @@ import GarbageCollector
 
 class Chesscord(discord.Client):
     def __init__(self, message_prefix='!'):
+        """
+        Object that represents the bot client itself.
+
+        :param message_prefix:
+
+        """
         super().__init__()
 
         Debug.log("Bot started!")
@@ -23,6 +29,13 @@ class Chesscord(discord.Client):
         self.loop.create_task(GarbageCollector.loop())
 
     def get_game_given_user(self, uid):
+        """
+        Retrieves a game given a participating user's id
+
+        :param uid:
+        :return: Matching ChessMatch object given
+        :rtype: Chess.ChessMatch
+        """
         for game in self.games:
             if game.player_white.id == uid or game.player_black.id == uid:
                 return game
@@ -127,6 +140,6 @@ if __name__ == "__main__":
     # Chess()
     try:
         cli = Chesscord()
-        cli.run('DUMMY TOKEN DING DING')
+        cli.run('NzA2MjcxNTE2OTAzMzQyMTM1.XsWazg.EQX3N9MSe5uQJD4nKgxZ_le5hDg')
     except Exception as e:
         Debug.log(str(e))
