@@ -3,10 +3,11 @@ import Chess
 import Debug
 import Utility
 import GarbageCollector
+from typing import Union
 
 
 class Chesscord(discord.Client):
-    def __init__(self, message_prefix='!'):
+    def __init__(self, message_prefix: str = '!'):
         """
         Object that represents the bot client itself.
 
@@ -28,7 +29,7 @@ class Chesscord(discord.Client):
         #   Add GarbageCollector's main loop to event loop
         self.loop.create_task(GarbageCollector.loop())
 
-    def get_game_given_user(self, uid):
+    def get_game_given_user(self, uid: int) -> Union[Chess.ChessMatch, None]:
         """
         Retrieves a game given a participating user's id
 
@@ -41,7 +42,13 @@ class Chesscord(discord.Client):
                 return game
         return None
 
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message):
+        """
+        Inherited method from discord.Client. Runs upon any certain message received. IT IS RIDICULOUSLY UGLY.
+
+        :param message: The message that triggered the event.
+        :return:
+        """
         content = message.content
 
         if content.startswith(self.message_prefix):
@@ -140,6 +147,6 @@ if __name__ == "__main__":
     # Chess()
     try:
         cli = Chesscord()
-        cli.run('NzA2MjcxNTE2OTAzMzQyMTM1.XsWazg.EQX3N9MSe5uQJD4nKgxZ_le5hDg')
+        cli.run(Utility.get_token_from_file('token.txt'))
     except Exception as e:
         Debug.log(str(e))

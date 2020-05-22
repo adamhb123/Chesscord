@@ -20,7 +20,7 @@ IM_DB = {'Board': "./rsc/board.png",
          }
 
 
-def get_graphical_board(board) -> Image.Image:
+def get_graphical_board(board: list) -> Image.Image:
     """
     Returns an image representation of the given chess board.
 
@@ -46,7 +46,7 @@ def get_graphical_board(board) -> Image.Image:
     return board_im
 
 
-def check_position_input_valid(position_input) -> bool:
+def check_position_input_valid(position_input: str) -> bool:
     """
     Checks whether or not the given positional input (ex: "A1") is a valid position or not.
 
@@ -57,7 +57,7 @@ def check_position_input_valid(position_input) -> bool:
     return isinstance(position_input, str) and ('A' <= position_input[0] <= 'H') and (1 <= int(position_input[1]) <= 8)
 
 
-def check_move_input_valid(move_input) -> bool:
+def check_move_input_valid(move_input: str) -> bool:
     """
     Checks validity of move input. All this does is make sure that both parts of the input are properly
 
@@ -73,7 +73,7 @@ def check_move_input_valid(move_input) -> bool:
         return False
 
 
-def index_position_to_conventional(position) -> str:
+def index_position_to_conventional(position: tuple) -> str:
     """
     Converts a given index position to its conventional equivalent, ex: (0,7) -> "A1"
 
@@ -86,7 +86,7 @@ def index_position_to_conventional(position) -> str:
     return str(index_a) + str(index_b)
 
 
-def conventional_position_to_index(position) -> tuple:
+def conventional_position_to_index(position: str) -> tuple:
     """
     Converts a given conventional position to its index equivalent, ex: "A1" -> (0,7).
 
@@ -99,7 +99,17 @@ def conventional_position_to_index(position) -> tuple:
     return index_b, index_a
 
 
-def divide_zero_error_ignore(n, d) -> float:
+def get_token_from_file(file: str) -> str:
+    with open(file, 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            if 'token' in line:
+                token = line.split('=')[1]
+
+    return token
+
+
+def divide_zero_error_ignore(n: int, d: int) -> float:
     """
     Used for division operations where division by zero errors must be ignored.
 
