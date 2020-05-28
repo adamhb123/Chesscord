@@ -9,14 +9,14 @@ from io import TextIOWrapper
 storage = []
 
 
-class log_type(Enum):
+class LogType(Enum):
     NORMAL = 0
     GAMEPLAY = 1
     WARNING = 2
     ERROR = 3
 
 
-def log(string, l_type=log_type.NORMAL):
+def log(string, l_type=LogType.NORMAL):
     storage.append((l_type, string))
 
 
@@ -42,7 +42,7 @@ async def loop():
     #   I AM SORRY ABOUT THE BARE EXCEPT, BUT I WANT THIS TO ATTEMPT TO RUN NO MATTER WHAT!
     #   This is most likely to occur due to insufficient file permissions, though!
     except Exception as e:
-        log(str(e), log_type.ERROR)
+        log(str(e), LogType.ERROR)
         while True:
             while len(storage) > 0:
                 string = "[DEBUG | %s]: %s" % (str(storage[0][0]).split('.')[1], storage[0][1])

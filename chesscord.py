@@ -3,6 +3,7 @@ import Chess
 import Debug
 import Utility
 import GarbageCollector
+import Database
 from typing import Union
 
 
@@ -11,30 +12,28 @@ class Chesscord(discord.Client):
         """
         Object that represents the bot client itself.
 
-        :param message_prefix:
-
+        :param message_prefix: The prefix required to access the bot (ex: the bang in '!help').
         """
         super().__init__()
 
         Debug.log("Bot started!")
         self.message_prefix = message_prefix
         self.games = []
+
         self.challengers = []
-        self.command_set = ['display', 'help', 'stats', 'challenge', 'accept', 'move',
-                            'd', 'h', 's', 'c', 'a', 'm']
+        self.command_set = ['display', 'help', 'stats', 'challenge', 'accept', 'move', 'resign',
+                            'd', 'h', 's', 'c', 'a', 'm', 'r']
 
-        #   Add Debugger's main loop to event loop
         self.loop.create_task(Debug.loop())
-
-        #   Add GarbageCollector's main loop to event loop
         self.loop.create_task(GarbageCollector.loop())
+        self.loop.create_task(Database.update_loop())
 
-    def get_game_given_user(self, uid: int) -> Union[Chess.ChessMatch, None]:
+    def get_game_given_uid(self, uid: int) -> Union[Chess.ChessMatch, None]:
         """
-        Retrieves a game given a participating user's id
+        Retrieves a game given a participating user's ID.
 
-        :param uid:
-        :return: Matching ChessMatch object given
+        :param uid: User's ID.
+        :return: Matching ChessMatch object given.
         :rtype: Chess.ChessMatch
         """
         for game in self.games:
@@ -42,12 +41,41 @@ class Chesscord(discord.Client):
                 return game
         return None
 
+    def get_player_obj_given_uid(self, uid) -> Union[Chess.Player, None]:
+        """
+        Retrieves a Chess.Player object given user's ID.
+
+        :param uid: User's ID.
+        :return: Either a Chess.Player object or None
+        """
+        game = self.get_game_given_uid(uid)
+        if game is not None:
+            if game.player_white.id == uid:
+                return game.player_white
+            elif game.player_black.id == uid:
+                return game.player_black
+        else:
+            return None
+
+    def __resignation(self, message: discord.Message) -> Union[str, bool, None]:
+        """
+        Contains all necessary operations for resignation.
+
+        :param message: The message that triggered the event.
+        :return: None if the user isn't playing a game, True if the resignation succeeds.
+        """
+        game = self.get_game_given_uid(message.author.id)
+        if game is None:
+            return None
+        else:
+            self.games.remove(game)
+            return True
+
     async def on_message(self, message: discord.Message):
         """
         Inherited method from discord.Client. Runs upon any certain message received. IT IS RIDICULOUSLY UGLY.
 
         :param message: The message that triggered the event.
-        :return:
         """
         content = message.content
 
@@ -56,7 +84,7 @@ class Chesscord(discord.Client):
             content = content[1:].strip().lower().split(' ')
             #   Search command set for given command
             if content[0] in self.command_set:
-                game = self.get_game_given_user(message.author.id)
+                game = self.get_game_given_uid(message.author.id)
                 if 'display' in content or content[0] == 'd':
                     if game is None:
                         await message.channel.send("You haven't started a game yet!")
@@ -107,15 +135,24 @@ class Chesscord(discord.Client):
                 elif 'accept' in content or content[0] == 'a':
                     if len(message.mentions) > 0:
                         if message.mentions[0] in self.challengers:
-                            self.games.append(Chess.ChessMatch(Utility.generate_game_id(),
+                            self.games.append(Chess.ChessMatch(Utility.generate_game_id(self.games),
                                                                init_message=message))
+
+                            Database.queue_instruction(message.mentions[0].id, Database.InstructionType.ADD_PLAYER)
                             self.challengers.remove(message.mentions[0])
                     else:
                         await message.channel.send(
                             "Please specify whose challenge you are accepting by mentioning them!")
 
+                elif 'resign' in content:
+                    res = self.__resignation(message)
+                    if res is None:
+                        await message.channel.send("You haven't started a game yet.")
+                    elif res is True:
+                        await message.channel.send("<@%s> has resigned." % message.author.id)
+
                 elif 'move' in content or content[0] == 'm':
-                    if self.get_game_given_user(message.author.id) is None:
+                    if self.get_game_given_uid(message.author.id) is None:
                         await message.channel.send("You haven't started a game yet.")
                     else:
                         move = content[1].upper()
@@ -130,12 +167,15 @@ class Chesscord(discord.Client):
                                 await message.channel.send("It is not your turn!")
                             elif move == "WRONG TEAM":
                                 await message.channel.send("That isn't your piece!")
+
+                            elif move == "OWN PIECE":
+                                await message.channel.send("You can't capture your own piece!")
+
                             else:
                                 fp = "./rsc/temp/gb%s.png" % game.id
                                 Utility.get_graphical_board(game.board).save(fp)
                                 board = discord.File(fp)
                                 await message.channel.send(file=board)
-
 
                         else:
                             await message.channel.send("Move input incorrect! Example: \"!move D3:D4\"")
@@ -144,9 +184,9 @@ class Chesscord(discord.Client):
 
 
 if __name__ == "__main__":
-    # Chess()
     try:
+        print("Project current total lines of code: %s" % Utility.get_project_lines_of_code())
         cli = Chesscord()
-        cli.run(Utility.get_token_from_file('token.txt'))
+        cli.run(Utility.get_token_from_file('private_config.txt'))
     except Exception as e:
         Debug.log(str(e))

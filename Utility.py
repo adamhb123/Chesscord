@@ -1,9 +1,9 @@
 from PIL import Image
 from random import randint
+import os
 import Debug
 from typing import Union
 
-CURRENT_GAMES = []
 IM_DB = {'Board': "./rsc/board.png",
          'White Bishop': "./rsc/pieces/white/white_bishop.png",
          'White King': "./rsc/pieces/white/white_king.png",
@@ -100,6 +100,12 @@ def conventional_position_to_index(position: str) -> tuple:
 
 
 def get_token_from_file(file: str) -> str:
+    """
+    Retrieves the bot token from a given file.
+
+    :param file: Path to file.
+    :return: The token as a string.
+    """
     with open(file, 'r') as f:
         lines = f.readlines()
         for line in lines:
@@ -107,6 +113,29 @@ def get_token_from_file(file: str) -> str:
                 token = line.split('=')[1]
 
     return token
+
+
+def get_project_lines_of_code() -> int:
+    """
+    Retrieves how many lines of code the project contains.
+
+    :return: The total amount of lines of code the project contains.
+    """
+    filenames = os.listdir(".")
+    total_count = 0
+    for fn in filenames:
+        try:
+            ext = fn.split('.')[1].strip()
+            if 'py' == ext:
+                with open('./%s' % fn, 'r') as f:
+                    lines = f.readlines()
+
+                total_count += len(lines)
+
+        except IndexError as e:
+            pass
+
+    return total_count
 
 
 def divide_zero_error_ignore(n: int, d: int) -> float:
@@ -121,18 +150,19 @@ def divide_zero_error_ignore(n: int, d: int) -> float:
     return n / d if d else 0.0
 
 
-def generate_game_id() -> int:
+def generate_game_id(current_games: list) -> int:
     """
     Generates a unique game id intended for a Chess.ChessMatch instance
 
+    :param current_games: List of the current active games.
     :return: Returns the generated unique game id.
     :rtype: int
     """
     a = randint(0, 100000000)
-    if len(CURRENT_GAMES) != 0:
-        if a in CURRENT_GAMES:
-            return generate_game_id()
-    CURRENT_GAMES.append(a)
+    if len(current_games) != 0:
+        for game in current_games:
+            if a == game.id:
+                return generate_game_id(current_games)
     return a
 
 
@@ -149,3 +179,7 @@ def get_help() -> str:
             TOO MANY```'''
 
     return helpstr
+
+
+if __name__ == "__main__":
+    print("Current LOC: %s" % get_project_lines_of_code())

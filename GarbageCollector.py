@@ -5,17 +5,17 @@ import Debug
 GARBAGE = []
 
 
-class QueueMember():
+class QueueMember:
     def __init__(self, path):
         self.path = path
 
 
-def queue(file):
+def queue(file) -> None:
     if os.path.exists(file):
         GARBAGE.append(QueueMember(file))
     else:
         Debug.log("Failed to add '%s' to the garbage queue...couldn't locate the file!" % file,
-                  l_type=Debug.log_type.WARNING)
+                  l_type=Debug.LogType.WARNING)
 
 
 async def loop():
@@ -28,7 +28,7 @@ async def loop():
                 GARBAGE.pop(0)
 
             except Exception as e:
-                Debug.log(str(e), Debug.log_type.WARNING)
+                Debug.log(str(e), Debug.LogType.WARNING)
 
             await asyncio.sleep(1)
         else:
