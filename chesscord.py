@@ -123,10 +123,8 @@ class Chesscord(discord.Client):
                     self.challengers.append(message.author)
                     if len(message.mentions) > 0:
                         await message.mentions[0].send(
-                            "_______________________________________________________\n"
-                            "Hey! %s has challenged you to a chess match in server: \"%s\"!\nTo accept, go to the"
-                            " channel you were mentioned in and type: \n\"!accept @%s\"\n"
-                            "_______________________________________________________\n" % (
+                            "\nHey! %s has challenged you to a chess match in server: \"%s\"!\nTo accept, go to the"
+                            " channel you were mentioned in and type: \n\"!accept @%s\"\n" % (
                                 message.author.name, message.guild,
                                 message.author.name + "#" + message.author.discriminator))
                     else:
@@ -156,10 +154,10 @@ class Chesscord(discord.Client):
                         await message.channel.send("You haven't started a game yet.")
                     else:
                         move = content[1].upper()
-                        if Utility.check_move_input_valid(move):
+                        Debug.log("MOVE: %s" % move)
+                        if Utility.check_move_input_valid(game, move):
                             move = move.split(':')
                             piece = game.piece_at_position(move[0])
-                            Debug.log("MOVING PIECE OWNER: %s" % piece.player.id)
                             move = piece.move(move[1], message)
                             if move is False:
                                 await message.channel.send("Invalid move!")
@@ -167,7 +165,6 @@ class Chesscord(discord.Client):
                                 await message.channel.send("It is not your turn!")
                             elif move == "WRONG TEAM":
                                 await message.channel.send("That isn't your piece!")
-
                             elif move == "OWN PIECE":
                                 await message.channel.send("You can't capture your own piece!")
 
@@ -180,7 +177,6 @@ class Chesscord(discord.Client):
                         else:
                             await message.channel.send("Move input incorrect! Example: \"!move D3:D4\"")
 
-                Debug.log("User %s activated the bot with %s" % (message.author.name, message.content))
 
 
 if __name__ == "__main__":

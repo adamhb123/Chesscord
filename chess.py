@@ -228,18 +228,17 @@ class Piece:
         Returns the player that the piece DOESN'T belong to.
 
         :return: The player that the piece doesn't belong to.
-        :rtype: Player
         """
         if self.player == self.game.player_white:
             return self.game.player_black
-        else:
-            return self.game.player_white
 
-    def __en_passant_conditions_met(self, piece_index: tuple, to_index: tuple) -> Union['Piece', None]:
+        return self.game.player_white
+
+    def __en_passant_conditions_met(self, player_index: tuple, to_index: tuple) -> Union['Piece', bool]:
         """
         Checks whether certain en passant conditions have been met. The conditions checked
         include:
-            a) Piece positioning
+            a) Enemy piece positioning
             b) Movement history
 
         :param piece_index: Index of the piece attempting a possible en passant.
@@ -247,16 +246,33 @@ class Piece:
         :return: The piece that will be en passanted, if it exists. Otherwise, None.
         :rtype: Union['Piece', None]
         """
-        piece_positioning_check = piece_index[1] == to_index[1] and abs(piece_index[0] - to_index[0]) == 1
-        move_history_check = self.game.move_history[-1].piece == self.game.piece_at_position(
-            Utility.index_position_to_conventional(to_index)) and abs(
-            self.game.move_history[-1].pre_loc_index[1] -
-            self.game.move_history[-1].post_loc_index[1]) == 2
+        Debug.log("Testing en_passant")
 
-        if piece_positioning_check and move_history_check:
-            return self.game.piece_at_position(Utility.index_position_to_conventional(to_index))
-        else:
-            return None
+        if self.player.color == "White":
+            supposed_enemy_piece = self.game.piece_at_position(
+                Utility.index_position_to_conventional((to_index[0], to_index[1]+1)))
+        elif self.player.color == "Black":
+            supposed_enemy_piece = self.game.piece_at_position(
+                Utility.index_position_to_conventional((to_index[0], to_index[1]-1)))
+
+        Debug.log(supposed_enemy_piece)
+
+        enemy_piece_check = supposed_enemy_piece is not None and supposed_enemy_piece.player.color != self.player.color
+
+        move_history_check = self.game.move_history[-1].piece == supposed_enemy_piece and abs(
+            self.game.move_history[-1].index_pre_loc[1] -
+            self.game.move_history[-1].index_post_loc[1]) == 2
+
+        Debug.log("En passant checks:\n enemy_piece_check of %s %s: %s\nmove_history_check: %s" %
+                  (supposed_enemy_piece.player.color, supposed_enemy_piece.name, enemy_piece_check,move_history_check))
+
+        if move_history_check and enemy_piece_check:
+            Debug.log("En_passant tests passed")
+            Debug.log(supposed_enemy_piece, l_type=Debug.LogType.WARNING)
+            if "Pawn" in supposed_enemy_piece.name:
+                return supposed_enemy_piece
+            return False
+        return False
 
     def __pawn_capture_conditions(self, player_index: tuple, to_index: tuple) -> bool:
         """
@@ -267,13 +283,16 @@ class Piece:
         :return: A boolean describing whether or not the pawn can capture a piece at given position to_index.
         :rtype: bool
         """
+        if self.game.piece_at_position(Utility.index_position_to_conventional(to_index)) is None:
+            return False
+
         if self.player.color == "White":
             return abs(to_index[0] - player_index[0]) == 1 and to_index[1] + 1 == player_index[1]
         elif self.player.color == "Black":
             return (to_index[0] - 1 == player_index[0] or to_index[0] + 1 == player_index[0]) and \
                    to_index[1] - 1 == player_index[1]
 
-    def __perform_move_operations(self, player_index: tuple, to_index: tuple) -> None:
+    def __perform_move_operations(self, player_index: tuple, to_index: tuple) -> bool:
         """
         Performs the various necessary move operations. Very descriptive, I know.
 
@@ -289,6 +308,39 @@ class Piece:
         self.location = to
         self.game.board[player_index[1]][player_index[0]] = 0
         self.game.current_player_turn = self.__get_other_player()
+        return True
+
+    def __pawn_capture(self, player_index: tuple, to_index: tuple, cap_piece: 'Piece') -> Union[bool, None]:
+        """
+        Highest level pawn capturing method, activates all necessary pawn capturing operations.
+        To answer a question you probably have: "Why does this need to_index AND cap_piece? Why not just get the
+        piece_at_position of to_index?"
+
+        It is necessary to have both to_index and cap_piece b/c of en passant (since the position of the captured
+        piece is not equal to the position the player's pawn is moving to).
+
+        This is activated AFTER other move check operations, so if this method is being ran, then the move itself
+        is guaranteed to be legitimate UNLESS en passant is involved.
+
+        :param player_index: Index of player's pawn that is being moved.
+        :param to_index: Index of the position the pawn is moving to.
+        :param cap_piece: Piece being captured by the player.
+        :return: Either a boolean or None depending on the given conditions. None is returned when the move is valid,
+        but does not involve the capture of any piece. False is returned when the requested move is supposed to be
+        en passant, but the conditions aren't right for en passant to take place.
+        """
+        #   If piece below left or below right
+        if self.__pawn_capture_conditions(player_index, to_index):
+            Debug.log("%s captures %s" % (self.get_identity(), cap_piece.get_identity()),
+                      Debug.LogType.GAMEPLAY)
+            self.player.captures.append(cap_piece)
+            self.__perform_move_operations(player_index, to_index)
+            return True
+        elif self.__en_passant_conditions_met(player_index,to_index):
+            self.player.captures.append(cap_piece)
+            self.__perform_move_operations(player_index, to_index)
+
+        return False
 
     def move(self, to: str, message: discord.Message) -> Union[str, bool]:
         """
@@ -298,54 +350,46 @@ class Piece:
         :rtype: bool
         """
         user_conditional = self.game.current_player_turn.id == self.player.id == message.author.id
-        Debug.log("%s==%s==%s: %s" % (self.game.current_player_turn, self.player.id, message.author.id,
+        Debug.log("%s==%s==%s: %s" % (self.game.current_player_turn.id, self.player.id, message.author.id,
                                       user_conditional))
+        #   user_conditional tests whether or not the user who activated the move command is actually meant to move.
         if user_conditional is True:
             player_index = Utility.conventional_position_to_index(self.location)
             to_index = Utility.conventional_position_to_index(to)
             move_valid = self.__move_valid(to)
-            en_passant = False
             print("Move_valid: %s" % move_valid)
             if move_valid:
                 cap_piece = self.game.board[to_index[1]][to_index[0]]
+                #   Runs if there is a piece at to_index, and that the piece does not belong to a player
                 if cap_piece != 0 and cap_piece.player is not self.player:
                     print("CAP PIECE PLAYER: %s VS PLAYER: %s" % (cap_piece.player.color, self.player.color))
                     if "Pawn" in self.name:
-                        if self.player.color == "White":
-                            #   En passant
-                            en_passant = self.__en_passant_conditions_met(player_index, to_index)
-                            #   If piece above left or above right
-                            if self.__pawn_capture_conditions(player_index, to_index):
-                                Debug.log("%s captures %s" % (self.get_identity(), cap_piece.get_identity()))
+                        return self.__pawn_capture(player_index, to_index, cap_piece)
 
-                            elif en_passant is not None:
-                                Debug.log("%s captures %s EN PASSANT" % (self.get_identity(), cap_piece.get_identity()))
-                            else:
-                                    return False
-                        elif self.player.color == "Black":
-                            #   If piece below left or below right
-                            #   En passant
-                            en_passant = self.__en_passant_conditions_met(player_index, to_index)
-                            if self.__pawn_capture_conditions(player_index, to_index):
-                                Debug.log("%s captures %s" % (self.get_identity(), cap_piece.get_identity()),
-                                          Debug.LogType.GAMEPLAY)
-                            elif en_passant is not None:
-                                Debug.log("%s captures %s EN PASSANT" % (self.get_identity(), cap_piece.get_identity()))
-                            else:
-                                return False
-                    if en_passant:
-                        pass
-                    else:
-                        self.player.captures.append(cap_piece)
-                        self.__perform_move_operations(player_index, to_index)
-                    return True
+                    return self.__perform_move_operations(player_index, to_index)
 
+                #   Runs if there is no capturable piece at to_index and the piece belongs to the player
                 elif cap_piece != 0 and cap_piece.player is self.player:
                     return "OWN PIECE"
 
+                #   Runs when there is no capturing (unless en passant happens) involved, but just basic movement
                 else:
-                    self.__perform_move_operations(player_index, to_index)
-                    return True
+                    #   Special basic movement principals for pawns
+                    if "Pawn" in self.name:
+                        #   Only vertical movement is allowed for normal pawn movement that doesn't involve capturing
+                        if player_index[0] - to_index[0] == 0:
+                            return self.__perform_move_operations(player_index, to_index)
+
+                        else:
+                            possible_en_passant_piece = self.__en_passant_conditions_met(player_index, to_index)
+                            if type(possible_en_passant_piece) is Piece:
+                                Debug.log("En passant (aka huge pain in the ass move that noone uses but I have to add "
+                                          "anyways) activated!")
+                                return self.__pawn_capture(player_index, to_index, possible_en_passant_piece)
+
+                    #   Normal movement for all other pieces
+                    else:
+                        return self.__perform_move_operations(player_index, to_index)
             else:
                 return False
 
@@ -355,168 +399,158 @@ class Piece:
         else:
             return "WRONG PLAYER"
 
+    def __distance_to_point(self, point: str) -> tuple:
+        """
+        Get's the horizontal and vertical distance from this piece to a given point.
 
-def __distance_to_point(self, point: str) -> tuple:
-    """
-    Get's the horizontal and vertical distance from this piece to a given point.
+        :param point: The point to get the distance to, in conventional (ex: "A1") formatting.
+        :return: A tuple that contains the horizontal and vertical distance from this piece to the given point.
+        :rtype: tuple
+        """
+        vertical = abs(int(point[1]) - int(self.location[1]))
+        horizontal = ord(point[0]) - ord(self.location[0])
+        return horizontal, vertical
 
-    :param point: The point to get the distance to, in conventional (ex: "A1") formatting.
-    :return: A tuple that contains the horizontal and vertical distance from this piece to the given point.
-    :rtype: tuple
-    """
-    vertical = abs(int(point[1]) - int(self.location[1]))
-    horizontal = ord(point[0]) - ord(self.location[0])
-    return horizontal, vertical
+    def __move_valid_initial_conditionals(self, to: str) -> bool:
+        """
+        Verifies that a move to the given location 'to' is possible for this piece.
+        Performs the following checks:
+            a) It is the player's turn.
+            b) There is no piece on the movement path (unless the piece is a Knight).
 
+        :param to: Location to which the piece wants to move.
+        :return: A boolean indicating whether or not the move is valid.
+        """
+        return self.player.color == self.game.current_player_turn.color and \
+               ((not self.game.piece_on_path(self.location, to)) or "Knight" in self.name)
 
-def __move_valid_initial_conditionals(self, to: str) -> bool:
-    """
-    Verifies that a move to the given location 'to' is possible for this piece.
-    Performs the following checks:
-        a) It is the player's turn.
-        b) There is no piece on the movement path.
+    @staticmethod
+    def __queen_movement_evaluation(distance_to_point: tuple) -> bool:
+        """
+        Verifies that a move matches the queen piece's movement patterns.
 
-    :param to: Location to which the piece wants to move.
-    :return: A boolean indicating whether or not the move is valid.
-    """
-    return self.player.color == self.game.current_player_turn.color and \
-           ((not self.game.piece_on_path(self.location, to)) or "Knight" in self.name)
+        :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
+        :return: A boolean indicating whether or not the move is valid.
+        """
+        #   Ensure only vertical/horizontal/diagonal movement
+        return (abs(Utility.divide_zero_error_ignore(distance_to_point[0], distance_to_point[1])) == 1 or abs(
+            Utility.divide_zero_error_ignore(distance_to_point[1], distance_to_point[0])) == 1) or (
+                       distance_to_point[0] == 0 or distance_to_point[1] == 0)
 
+    @staticmethod
+    def __king_movement_evaluation(distance_to_point: tuple) -> bool:
+        """
+        Verifies that a move matches the king piece's movement patterns.
 
-@staticmethod
-def __queen_movement_evaluation(distance_to_point: tuple) -> bool:
-    """
-    Verifies that a move matches the queen piece's movement patterns.
+        :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
+        :return: A boolean indicating whether or not the move is valid.
+        """
+        #   Ensure only single spaced vertical/horizontal/diagonal movement
+        return (abs(distance_to_point[0]) <= 1 and abs(distance_to_point[1]) <= 1) and (
+                (abs(Utility.divide_zero_error_ignore(distance_to_point[0], distance_to_point[1])) == 1 or abs(
+                    Utility.divide_zero_error_ignore(distance_to_point[1], distance_to_point[0])) == 1) or (
+                        distance_to_point[0] == 0 or distance_to_point[1] == 0))
 
-    :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
-    :return: A boolean indicating whether or not the move is valid.
-    """
-    #   Ensure only vertical/horizontal/diagonal movement
-    return (abs(Utility.divide_zero_error_ignore(distance_to_point[0], distance_to_point[1])) == 1 or abs(
-        Utility.divide_zero_error_ignore(distance_to_point[1], distance_to_point[0])) == 1) or (
-                   distance_to_point[0] == 0 or distance_to_point[1] == 0)
+    @staticmethod
+    def __rook_movement_evaluation(distance_to_point: tuple) -> bool:
+        """
+        Verifies that a move matches the rook piece's movement patterns.
 
+        :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
+        :return: A boolean indicating whether or not the move is valid.
+        """
+        #   Ensure only vertical/horizontal movement
+        return distance_to_point[0] == 0 or distance_to_point[1] == 0
 
-@staticmethod
-def __king_movement_evaluation(distance_to_point: tuple) -> bool:
-    """
-    Verifies that a move matches the king piece's movement patterns.
+    @staticmethod
+    def __bishop_movement_evaluation(distance_to_point: tuple) -> bool:
+        """
+        Verifies that a move matches the bishop piece's movement patterns.
 
-    :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
-    :return: A boolean indicating whether or not the move is valid.
-    """
-    #   Ensure only single spaced vertical/horizontal/diagonal movement
-    return (abs(distance_to_point[0]) <= 1 and abs(distance_to_point[1]) <= 1) and (
-            (abs(Utility.divide_zero_error_ignore(distance_to_point[0], distance_to_point[1])) == 1 or abs(
-                Utility.divide_zero_error_ignore(distance_to_point[1], distance_to_point[0])) == 1) or (
-                    distance_to_point[0] == 0 or distance_to_point[1] == 0))
+        :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
+        :return: A boolean indicating whether or not the move is valid.
+        """
+        #   Ensure only diagonal movement
+        return abs(Utility.divide_zero_error_ignore(distance_to_point[0], distance_to_point[1])) == 1 or abs(
+            Utility.divide_zero_error_ignore(distance_to_point[1], distance_to_point[0])) == 1
 
+    @staticmethod
+    def __knight_movement_evaluation(distance_to_point: tuple) -> bool:
+        """
+        Verifies that a move matches the knight piece's movement patterns.
 
-@staticmethod
-def __rook_movement_evaluation(distance_to_point: tuple) -> bool:
-    """
-    Verifies that a move matches the rook piece's movement patterns.
+        :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
+        :return: A boolean indicating whether or not the move is valid.
+        """
+        #   Ensure knight pattern movement
+        return (abs(distance_to_point[0]) == 1 and abs(distance_to_point[1]) == 2) or (
+                abs(distance_to_point[0]) == 2 and abs(distance_to_point[1]) == 1)
 
-    :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
-    :return: A boolean indicating whether or not the move is valid.
-    """
-    #   Ensure only vertical/horizontal movement
-    return distance_to_point[0] == 0 or distance_to_point[1] == 0
+    def __pawn_movement_evaluation(self, distance_to_point: tuple) -> bool:
+        """
+        Verifies that a move matches the pawn piece's movement patterns.
 
+        :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
+        :return: A boolean indicating whether or not the move is valid.
+        """
+        location_as_index = self.__location_as_index()
 
-@staticmethod
-def __bishop_movement_evaluation(distance_to_point: tuple) -> bool:
-    """
-    Verifies that a move matches the bishop piece's movement patterns.
-
-    :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
-    :return: A boolean indicating whether or not the move is valid.
-    """
-    #   Ensure only diagonal movement
-    return abs(Utility.divide_zero_error_ignore(distance_to_point[0], distance_to_point[1])) == 1 or abs(
-        Utility.divide_zero_error_ignore(distance_to_point[1], distance_to_point[0])) == 1
-
-
-@staticmethod
-def __knight_movement_evaluation(distance_to_point: tuple) -> bool:
-    """
-    Verifies that a move matches the knight piece's movement patterns.
-
-    :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
-    :return: A boolean indicating whether or not the move is valid.
-    """
-    #   Ensure knight pattern movement
-    return (abs(distance_to_point[0]) == 1 and abs(distance_to_point[1]) == 2) or (
-            abs(distance_to_point[0]) == 2 and abs(distance_to_point[1]) == 1)
-
-
-def __pawn_movement_evaluation(self, distance_to_point: tuple) -> bool:
-    """
-    Verifies that a move matches the pawn piece's movement patterns.
-
-    :param distance_to_point: Distance to the desired move location as a tuple: (horizontal, vertical).
-    :return: A boolean indicating whether or not the move is valid.
-    """
-    location_as_index = self.__location_as_index()
-    #   Pawn is being moved 1 space
-    if distance_to_point[1] == 1:
-        if self.player.color == "White":
-            piece_in_front = self.game.piece_at_position(Utility.index_position_to_conventional(
-                (location_as_index[0], location_as_index[1] - 1)))
-        else:
-            piece_in_front = self.game.piece_at_position(Utility.index_position_to_conventional(
-                (location_as_index[0], location_as_index[1] + 1)))
-
-        if piece_in_front is None or piece_in_front.player.color != self.player.color:
-            return True
-
-    #   Pawn is being moved 2 spaces
-    elif distance_to_point[1] == 2:
-        if self.player.color == "White":
-            piece_in_front = self.game.piece_at_position(Utility.index_position_to_conventional(
-                (location_as_index[0], location_as_index[1] - 2)))
-        else:
-            piece_in_front = self.game.piece_at_position(Utility.index_position_to_conventional(
-                (location_as_index[0], location_as_index[1] + 2)))
-
-        #   Piece is its relative second rank
-        if ((self.player.color == "White" and location_as_index[1] == 6) or
-                (self.player.color == "Black" and location_as_index[1] == 1)):
+        #   Pawn is being moved 1 space
+        if distance_to_point[1] == 1:
+            if self.player.color == "White":
+                piece_in_front = self.game.piece_at_position(Utility.index_position_to_conventional(
+                    (location_as_index[0], location_as_index[1] - 1)))
+            else:
+                piece_in_front = self.game.piece_at_position(Utility.index_position_to_conventional(
+                    (location_as_index[0], location_as_index[1] + 1)))
 
             if piece_in_front is None or piece_in_front.player.color != self.player.color:
                 return True
 
-    return False
+        #   Pawn is being moved 2 spaces
+        elif distance_to_point[1] == 2:
+            if self.player.color == "White":
+                piece_in_front = self.game.piece_at_position(Utility.index_position_to_conventional(
+                    (location_as_index[0], location_as_index[1] - 2)))
+            else:
+                piece_in_front = self.game.piece_at_position(Utility.index_position_to_conventional(
+                    (location_as_index[0], location_as_index[1] + 2)))
 
+            #   Piece is its relative second rank
+            if ((self.player.color == "White" and location_as_index[1] == 6) or
+                    (self.player.color == "Black" and location_as_index[1] == 1)):
 
-def __move_valid(self, to: str) -> bool:
-    """
-    Checks whether a certain move is valid.
+                if piece_in_front is None or piece_in_front.player.color != self.player.color:
+                    return True
 
-    :param to: Proposed location to move to.
-    :return: A boolean that describes whether or not the given move is valid.
-    """
-    print("Piece color: %s || Player color: %s" % (self.player.color, self.game.current_player_turn.color))
-    if self.__move_valid_initial_conditionals(to):
-        distance_to_point = self.__distance_to_point(to)
+        return False
 
-        if "Pawn" in self.name:
-            return self.__pawn_movement_evaluation(distance_to_point)
+    def __move_valid(self, to: str) -> bool:
+        """
+        Checks whether a certain move is valid given the position it is moving to. Accounts for movement patterns
 
-        elif "Rook" in self.name:
-            return self.__rook_movement_evaluation(distance_to_point)
+        :param to: Proposed location to move to.
+        :return: A boolean that describes whether or not the given move is valid.
+        """
+        if self.__move_valid_initial_conditionals(to):
+            distance_to_point = self.__distance_to_point(to)
+            if "Pawn" in self.name:
+                return self.__pawn_movement_evaluation(distance_to_point)
 
-        elif "Bishop" in self.name:
-            return self.__bishop_movement_evaluation(distance_to_point)
+            elif "Rook" in self.name:
+                return self.__rook_movement_evaluation(distance_to_point)
 
-        elif "Knight" in self.name:
-            return self.__knight_movement_evaluation(distance_to_point)
+            elif "Bishop" in self.name:
+                return self.__bishop_movement_evaluation(distance_to_point)
 
-        elif "Queen" in self.name:
-            return self.__queen_movement_evaluation(distance_to_point)
+            elif "Knight" in self.name:
+                return self.__knight_movement_evaluation(distance_to_point)
 
-        elif "King" in self.name:
-            return self.__king_movement_evaluation(distance_to_point)
+            elif "Queen" in self.name:
+                return self.__queen_movement_evaluation(distance_to_point)
+
+            elif "King" in self.name:
+                return self.__king_movement_evaluation(distance_to_point)
 
 
 class HistoricalMove:

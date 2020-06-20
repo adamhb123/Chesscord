@@ -57,11 +57,12 @@ def check_position_input_valid(position_input: str) -> bool:
     return isinstance(position_input, str) and ('A' <= position_input[0] <= 'H') and (1 <= int(position_input[1]) <= 8)
 
 
-def check_move_input_valid(move_input: str) -> bool:
+def check_move_input_valid(game: 'Chess.ChessMatch', move_input: str) -> bool:
     """
     Checks validity of move input. All this does is make sure that both parts of the input are properly
 
     :param move_input: Move input to check.
+    :param game: Game that the move is being made in.
     :return: A boolean indicating whether or not the move input is valid
     :rtype: bool
     """
