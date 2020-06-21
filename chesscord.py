@@ -57,7 +57,7 @@ class Chesscord(discord.Client):
         else:
             return None
 
-    def __resignation(self, message: discord.Message) -> Union[str, bool, None]:
+    def _resignation(self, message: discord.Message) -> Union[str, bool, None]:
         """
         Contains all necessary operations for resignation.
 
@@ -69,6 +69,7 @@ class Chesscord(discord.Client):
             return None
         else:
             self.games.remove(game)
+
             return True
 
     async def on_message(self, message: discord.Message):
@@ -143,7 +144,7 @@ class Chesscord(discord.Client):
                             "Please specify whose challenge you are accepting by mentioning them!")
 
                 elif 'resign' in content:
-                    res = self.__resignation(message)
+                    res = self._resignation(message)
                     if res is None:
                         await message.channel.send("You haven't started a game yet.")
                     elif res is True:
@@ -178,11 +179,10 @@ class Chesscord(discord.Client):
                             await message.channel.send("Move input incorrect! Example: \"!move D3:D4\"")
 
 
-
 if __name__ == "__main__":
     try:
         print("Project current total lines of code: %s" % Utility.get_project_lines_of_code())
         cli = Chesscord()
-        cli.run(Utility.get_token_from_file('private_config.txt'))
+        cli.run(Utility.get_token_from_file('pconf.txt'))
     except Exception as e:
         Debug.log(str(e))

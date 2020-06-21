@@ -62,12 +62,12 @@ def queue_instruction(uid: int, instruction_type: InstructionType) -> None:
     instructions.append(Instruction(uid, instruction_type))
 
 
-async def __add_player(db: aiosqlite.Connection, uid: int) -> None:
+async def _add_player(db: aiosqlite.Connection, uid: int) -> None:
     await db.execute("INSERT INTO player_info(id,g_played,g_won,g_lost,g_stale) VALUES (?,?,?,?)",
                      (uid, 0, 0, 0))
 
 
-async def __update_player_stats_dict(db: aiosqlite.Connection, uid: int) -> tuple:
+async def _update_player_stats_dict(db: aiosqlite.Connection, uid: int) -> tuple:
     uid, wins, losses, stalemates = await db.execute("SELECT ? FROM player_info", (uid,))
     return uid, wins, losses, stalemates
 
