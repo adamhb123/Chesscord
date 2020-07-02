@@ -23,6 +23,20 @@ class BoardDisplayType(Enum):
     LOCATIONAL = 3
     COLOR = 4
 
+class HistoricalMove:
+    def __init__(self, piece: 'Piece', pre_loc: str, post_loc: str):
+        """
+        Represents a past move in game history.
+
+        :param piece: Piece that made the move.
+        :param pre_loc: Location (in conventional format) before the move was made.
+        :param post_loc: Location (in conventional format) after the move was made.
+        """
+        self.piece = piece
+        self.pre_loc = pre_loc
+        self.post_loc = post_loc
+        self.index_pre_loc = Utility.conventional_position_to_index(self.pre_loc)
+        self.index_post_loc = Utility.conventional_position_to_index(self.post_loc)
 
 class Player:
     def __init__(self, uid: int, color: str):
@@ -198,9 +212,9 @@ class ChessMatch:
                     result = True
                     if return_list: piece_list.append(piece)
 
-        #   For horizontal pathing, check if column/row ratio is 1
-        elif (int(point_b[1]) - int(point_a[1])) / (ord(point_b[0]) - ord(point_a[0])) == 1:
-            print("Horizontal")
+        #   For diagonal pathing, check if column/row ratio is 1
+        elif abs((int(point_b[1]) - int(point_a[1])) / (ord(point_b[0]) - ord(point_a[0]))) == 1:
+            Debug.log("diagonal")
             for x in range(int(point_a[1]) + 1, int(point_b[1])):
                 piece = self.piece_at_position(chr(x + 97) + str(x))
                 if piece is not None:
@@ -208,7 +222,7 @@ class ChessMatch:
                     if return_list: piece_list.append(piece)
 
         if return_list:
-            return result, return_list
+            return result, piece_list
 
         return result
 
@@ -372,15 +386,16 @@ class Piece:
             return True
         return False
 
-    def _path_is_straight_to_piece(self, point_a: str, to_piece: 'Piece') -> tuple:
+    def _path_is_straight_to_piece(self, point_a: str, to_piece: 'Piece') -> bool:
         """
         Checks whether or not the path from point_a to point_b goes straight to a piece with no pieces in between.
         Essentially this means that there is a piece at point_b, but no pieces on the path from point_a to point_b
-        except said piece at point_b. This only works for actual direct routes, diagonals DO NOT WORK.
+        except said piece at point_b. This only works for actual direct routes, diagonals DO NOT WORK. Use
+        _path_is_directly_diagonal_to_piece for that.
 
         :param point_a: Starting path point.
         :param to_piece: Piece that we are pathing to.
-        :return: A tuple (A,B) containing A: whether or not the path leads straight to the piece.
+        :return: A tuple (A,B) containing A: whether or not the path leads straight to the piece
         """
         result, pieces = self.game.piece_on_path(point_a,to_piece.location,return_list=True)
         if len(pieces) == 1 and pieces[0] == to_piece:
@@ -388,61 +403,163 @@ class Piece:
         else:
             return False
 
-    def _check_stalemate(self):
+    def _path_is_directly_diagonal_to_piece(self, point_a: str, to_piece: 'Piece') -> bool:
+        """
+        Checks whether or not the path from point_a to point_b goes straight to a piece diagonally with no pieces in between.
+        Essentially this means that there is a piece at point_b, but no pieces on the path from point_a to point_b
+        except said piece at point_b. Main use case for this is checking check.
+
+        :param point_a: Starting path point.
+        :param to_piece: Piece that we are pathing to.
+        :return: A tuple (A,B) containing A: whether or not the path leads straight diagonally to the piece.
+        """
+        point_index = Utility.conventional_position_to_index(point_a)
+
+        #   Go to bottom right diagonal
+        cursor_x, cursor_y = point_index[0], point_index[1]
+        while cursor_x < 7 and cursor_y < 7:
+            piece_chk = self.game.piece_at_position(Utility.index_position_to_conventional((cursor_x,cursor_y)))
+            if type(piece_chk) is Piece:
+                if to_piece == piece_chk:
+                    return True
+                else:
+                    break
+            cursor_x += 1
+            cursor_y += 1
+
+        #   Go to bottom left diagonal
+        cursor_x, cursor_y = point_index[0], point_index[1]
+        while cursor_x > 0 and cursor_y < 7:
+            piece_chk = self.game.piece_at_position(Utility.index_position_to_conventional((cursor_x, cursor_y)))
+            if type(piece_chk) is Piece:
+                if to_piece == piece_chk:
+                    return True
+                else:
+                    break
+            cursor_x -= 1
+            cursor_y += 1
+
+        #   Go to top right diagonal
+        cursor_x, cursor_y = point_index[0], point_index[1]
+        while cursor_x < 7 and cursor_y > 0:
+            piece_chk = self.game.piece_at_position(Utility.index_position_to_conventional((cursor_x, cursor_y)))
+            if type(piece_chk) is Piece:
+                if to_piece == piece_chk:
+                    return True
+                else:
+                    break
+            cursor_x += 1
+            cursor_y -= 1
+        #   Go to top left diagonal
+        cursor_x, cursor_y = point_index[0], point_index[1]
+        while cursor_x > 0 and cursor_y > 0:
+            piece_chk = self.game.piece_at_position(Utility.index_position_to_conventional((cursor_x, cursor_y)))
+            if type(piece_chk) is Piece:
+                if to_piece == piece_chk:
+                    return True
+                else:
+                    break
+            cursor_x -= 1
+            cursor_y -= 1
+        return False
+
+
+    #def _check_stalemate(self):
         #self.game.board
 
-    def _check_check(self, moving_player: Player):
+    def _check_check(self, player_color: str, opposing_king_position: str):
         """
         Checks whether or not a player is in check.
 
-        :param moving_player:
+        :param opposing_king_position: The opposing king's position in conventional formatting (string).
+        :param player: The player who may be checking (the checker). Don't know how else to work it.
         :return: A boolean revealing whether or not the opposing player is in check.
         """
-        if moving_player.color == "White":
-            moving_player_pieces = []
-            for row in self.game.board:
-                for piece in row:
-                    if type(piece) == Piece and piece.player.color == moving_player.color:
-                        moving_player_pieces.append(piece)
+        if "King" not in self.game.piece_at_position(opposing_king_position).name:
+            return False
 
+        opposing_king_position_index = Utility.conventional_position_to_index(opposing_king_position)
 
-        for piece in moving_player_pieces:
-            position_index = piece.location_as_index()
-            pieces = (None,None)
+        dbg = None
+
+        #   SNAG ALL PIECES
+        player_pieces = []
+        for row in self.game.board:
+            for piece in row:
+                if type(piece) is Piece:
+                    if player_color == piece.player.color:
+                        player_pieces.append(piece)
+        #   END SNAGGING
+
+        for piece in player_pieces:
             if "Pawn" in piece.name:
-                if piece.player.color == "White":
-                    up_left = Utility.index_position_to_conventional((position_index[0]-1, position_index[1]-1))
-                    up_right = Utility.index_position_to_conventional((position_index[0]+1, position_index[1]-1))
-                    pieces = (self.game.piece_at_position(up_left), self.game.piece_at_position(up_right))
-                elif piece.player.color == "Black":
-                    down_left = Utility.index_position_to_conventional((position_index[0]-1, position_index[1]+1))
-                    down_right = Utility.index_position_to_conventional((position_index[0]+1, position_index[1]+1))
-                    pieces = (self.game.piece_at_position(down_left), self.game.piece_at_position(down_right))
+                #   In hindsight I could have used the same function I used for the bishop here
+                if player_color == "White":
+                    top_left = self.game.piece_at_position(
+                        Utility.index_position_to_conventional((opposing_king_position_index[0]-1,
+                                                                opposing_king_position_index[1]-1)))
+                    top_right = self.game.piece_at_position(
+                        Utility.index_position_to_conventional((opposing_king_position_index[0]+1,
+                                                                opposing_king_position_index[1]-1)))
+                    if type(top_left) is Piece and "King" in top_left.name and top_left.player.color != player_color:
+                        Debug.log("CHKCHK TRUE: %s pieceatpos %s" % (piece.name, top_left.name))
+                        return True
 
-                if pieces[0] is not None and pieces[0].color != moving_player.color:
-                    if "King" in piece.name:
+                    elif type(top_right) is Piece and "King" in top_right.name and \
+                            top_right.player.color != player_color:
+                        Debug.log("CHKCHK TRUE: %s pieceatpos %s" % (piece.name, top_right.name))
                         return True
-                elif pieces[1] is not None and pieces[1].color != moving_player.color:
-                    if "King" in piece.name:
+
+                elif player_color == "Black":
+                    bottom_left = Utility.index_position_to_conventional((opposing_king_position_index[0]-1,
+                                                                          opposing_king_position_index[1]+1))
+                    bottom_right = Utility.index_position_to_conventional((opposing_king_position_index[0] + 1,
+                                                                          opposing_king_position_index[1] + 1))
+                    if self.game.piece_at_position(bottom_left) is not None or \
+                            self.game.piece_at_position(bottom_right) is not None:
+                        Debug.log("CHKCHK TRUE: %s" % piece.name)
                         return True
+
             elif "Rook" in piece.name:
-                #   Grab opposing King
-                for row in self.game.board:
-                    for piece in row:
-                        if piece.color != self.player.color and "King" in piece.name:
-                            if self._path_is_straight_to_piece(self.location, piece):
-                                return True
-
+                if self._path_is_straight_to_piece(opposing_king_position,piece):
+                    Debug.log("CHKCHK TRUE: %s" % piece.name)
+                    return True
 
             elif "Knight" in piece.name:
+                piece_index = piece.location_as_index()
+                distance_to_point = (opposing_king_position_index[0]-piece_index[0],
+                                     opposing_king_position_index[1]-piece_index[1])
+                #   We can use the knight movement evaluation here to check this whole deal because
+                #   There is no chance of another piece being in the way due to the way lil' horsie moves
+                if self._knight_movement_evaluation(distance_to_point):
+                    Debug.log("CHKCHK TRUE: %s" % piece.name)
+                    return True
+
+            elif "Bishop" in piece.name:
+                if self._path_is_directly_diagonal_to_piece(opposing_king_position, piece):
+                    Debug.log("CHKCHK TRUE: %s" % piece.name)
+                    return True
 
             elif "Queen" in piece.name:
+                queen_chk_cond = self._path_is_directly_diagonal_to_piece(opposing_king_position, piece) or \
+                self._path_is_straight_to_piece(opposing_king_position, piece)
+                Debug.log("Queen chk cond: %s" % queen_chk_cond)
+
+                if queen_chk_cond:
+                    Debug.log("CHKCHK TRUE: %s" % piece.name)
+                    return True
 
             elif "King" in piece.name:
+                piece_index = piece.location_as_index()
+                distance_to_point = (abs(opposing_king_position_index[0] - piece_index[0]),
+                                     abs(opposing_king_position_index[1] - piece_index[1]))
+                if distance_to_point[0] < 2 and distance_to_point[1] < 2:
+                    Debug.log("CHKCHK TRUE: %s" % piece.name)
+                    return True
 
-        return False
+            return False
 
-    def _check_checkmate(self):
+    #def _check_checkmate(self):
 
 
     def move(self, to: str, message: discord.Message) -> Union[str, bool]:
@@ -464,7 +581,7 @@ class Piece:
             print("Move_valid: %s" % move_valid)
             if move_valid:
                 cap_piece = self.game.board[to_index[1]][to_index[0]]
-                #   Runs if there is a piece at to_index, and that the piece does not belong to a player
+                #   Runs if there is a piece at to_index and the piece does not belong to the player
                 if cap_piece != 0 and cap_piece.player is not self.player:
                     print("CAP PIECE PLAYER: %s VS PLAYER: %s" % (cap_piece.player.color, self.player.color))
                     if "Pawn" in self.name:
@@ -506,11 +623,15 @@ class Piece:
         #   Was the action successful?
         if result is not None and type(result) != str:
             #   The action was successful, check stalemate/checkmate/check conditions
-            if self._check_check():
+            #   Grab opponent's king
+            for row in self.game.board:
+                for piece in row:
+                    if type(piece) is Piece:
+                        if "King" in piece.name and piece.player != self.player:
+                            king = piece
+            chkchk = self._check_check(self.player.color, king.location)
+            Debug.log("CHKHK: %s" % chkchk)
 
-            elif self._check_stalemate():
-
-            elif self._check_checkmate():
 
 
         return result
@@ -669,20 +790,7 @@ class Piece:
                 return self._king_movement_evaluation(distance_to_point)
 
 
-class HistoricalMove:
-    def __init_(self, piece: Piece, pre_loc: str, post_loc: str):
-        """
-        Represents a past move in game history.
 
-        :param piece: Piece that made the move.
-        :param pre_loc: Location (in conventional format) before the move was made.
-        :param post_loc: Location (in conventional format) after the move was made.
-        """
-        self.piece = piece
-        self.pre_loc = pre_loc
-        self.post_loc = post_loc
-        self.index_pre_loc = Utility.conventional_position_to_index(self.pre_loc)
-        self.index_post_loc = Utility.conventional_position_to_index(self.post_loc)
 
 
 class _MessageDummy:

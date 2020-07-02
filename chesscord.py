@@ -121,15 +121,18 @@ class Chesscord(discord.Client):
                     await message.channel.send()
 
                 elif 'challenge' in content or content[0] == 'c':
-                    self.challengers.append(message.author)
-                    if len(message.mentions) > 0:
-                        await message.mentions[0].send(
-                            "\nHey! %s has challenged you to a chess match in server: \"%s\"!\nTo accept, go to the"
-                            " channel you were mentioned in and type: \n\"!accept @%s\"\n" % (
-                                message.author.name, message.guild,
-                                message.author.name + "#" + message.author.discriminator))
+                    if message.author != message.mentions[0]:
+                        self.challengers.append(message.author)
+                        if len(message.mentions) > 0:
+                            await message.mentions[0].send(
+                                "\nHey! %s has challenged you to a chess match in server: \"%s\"!\nTo accept, go to the"
+                                " channel you were mentioned in and type: \n\"!accept @%s\"\n" % (
+                                    message.author.name, message.guild,
+                                    message.author.name + "#" + message.author.discriminator))
+                        else:
+                            await message.channel.send("Please specify who you are challenging by mentioning them!")
                     else:
-                        await message.channel.send("Please specify who you are challenging by mentioning them!")
+                        await message.channel.send("You cannot play against yourself!")
 
                 elif 'accept' in content or content[0] == 'a':
                     if len(message.mentions) > 0:
