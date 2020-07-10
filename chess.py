@@ -182,6 +182,8 @@ class ChessMatch:
         """
         result = False
         piece_list = []
+        point_a_index = Utility.conventional_position_to_index(point_a)
+        point_b_index = Utility.conventional_position_to_index(point_b)
         #   Should be totally functional...does not identify the piece on point_a
         if not Utility.check_position_input_valid(point_a):
             Debug.log("Method 'piece_on_path' given bad value for argument 'point_a'")
@@ -197,29 +199,73 @@ class ChessMatch:
 
 
         #   If given path is in same column
-        elif point_a[0] == point_b[0]:
-            for x in range(int(point_a[1]) + 1, int(point_b[1])):
-                piece = self.piece_at_position(point_a[0] + str(x))
-                if piece is not None:
-                    result = True
-                    if return_list: piece_list.append(piece)
+        elif point_a_index[0] == point_b_index[0]:
+            cursor_y = point_a_index[1]
+            if point_a_index[1] > point_b_index[1]:
+
+                cursor_y -= 1
 
         #   If given path is in same row
-        elif point_a[1] == point_b[1]:
-            for x in range(ord(point_a[0]) + 1, ord(point_b[0])):
-                piece = self.piece_at_position(chr(x) + str(point_a[1]))
-                if piece is not None:
-                    result = True
-                    if return_list: piece_list.append(piece)
+        elif point_a_index[1] == point_b_index[1]:
+            cursor_x, cursor_y = point_a_index[0], point_a_index[1]
+            if point_a_index[0] > point_b_index[0]:
+                while cursor_x > point_b_index[0]:
+                    piece = self.piece_at_position(Utility.index_position_to_conventional((cursor_x, cursor_y)))
+                    if piece is not None:
+                        result = True
+                        if return_list: piece_list.append(piece)
+                    cursor_x -= 1
+            elif point_a_index[0] < point_b_index[0]:
+                while cursor_x < point_b_index[0]:
+                    piece = self.piece_at_position(Utility.index_position_to_conventional((cursor_x, cursor_y)))
+                    if piece is not None:
+                        result = True
+                        if return_list: piece_list.append(piece)
+                    cursor_x += 1
 
         #   For diagonal pathing, check if column/row ratio is 1
-        elif abs((int(point_b[1]) - int(point_a[1])) / (ord(point_b[0]) - ord(point_a[0]))) == 1:
+
+        elif abs(Utility.divide_zero_error_ignore((point_b_index[1]-point_a_index[1]),
+                                                  point_b_index[0]-point_a_index[0])) == 1:
             Debug.log("diagonal")
-            for x in range(int(point_a[1]) + 1, int(point_b[1])):
-                piece = self.piece_at_position(chr(x + 97) + str(x))
-                if piece is not None:
-                    result = True
-                    if return_list: piece_list.append(piece)
+            cursor_x, cursor_y = point_a_index[0], point_a_index[1]
+
+            #   point_b is up and left of point_a
+            if point_a_index[0] > point_b_index[0] and point_a_index[1] > point_b_index[1]:
+                while cursor_x > point_b_index[0]:
+                    piece = self.piece_at_position(Utility.index_position_to_conventional((cursor_x, cursor_y)))
+                    if piece is not None:
+                        result = True
+                        if return_list: piece_list.append(piece)
+                    cursor_x -= 1
+                    cursor_y -= 1
+            #   point_b is down and left of point_a
+            elif point_a_index[0] > point_b_index[0] and point_a_index[1] < point_b_index[1]:
+                while cursor_x > point_b_index[0]:
+                    piece = self.piece_at_position(Utility.index_position_to_conventional((cursor_x, cursor_y)))
+                    if piece is not None:
+                        result = True
+                        if return_list: piece_list.append(piece)
+                    cursor_x -= 1
+                    cursor_y += 1
+            #   point_b is up and right of point_a
+            elif point_a_index[0] < point_b_index[0] and point_a_index[1] > point_b_index[1]:
+                while cursor_x < point_b_index[0]:
+                    piece = self.piece_at_position(Utility.index_position_to_conventional((cursor_x, cursor_y)))
+                    if piece is not None:
+                        result = True
+                        if return_list: piece_list.append(piece)
+                    cursor_x += 1
+                    cursor_y -= 1
+            #   point_b is down and right of point_a
+            elif point_a_index[0] < point_b_index[0] and point_a_index[1] < point_b_index[1]:
+                while cursor_x < point_b_index[0]:
+                    piece = self.piece_at_position(Utility.index_position_to_conventional((cursor_x, cursor_y)))
+                    if piece is not None:
+                        result = True
+                        if return_list: piece_list.append(piece)
+                    cursor_x += 1
+                    cursor_y += 1
 
         if return_list:
             return result, piece_list
